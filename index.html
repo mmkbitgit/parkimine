@@ -46,6 +46,7 @@
     .label {
       color: #777;
       font-size: 14px;
+      letter-spacing: 1px;
     }
   </style>
 </head>
@@ -57,20 +58,33 @@
 </div>
 
 <script>
-
 const CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vQJ2FJlBILmtLsYYJ4SgZ3jzEydJCWFWBSK_jMuBFRmY_h2z8YeQJtkbSVyX8NT23SgQOnsKRCB8D57/pub?gid=0&single=true&output=csv";
 
 const params = new URLSearchParams(window.location.search);
-
 const id = params.get("id");
 
+function parseDate(value) {
+  if (!value) return null;
+
+  const parts = value.trim().split(".");
+
+  if (parts.length === 3) {
+    return new Date(
+      Number(parts[2]),
+      Number(parts[1]) - 1,
+      Number(parts[0])
+    );
+  }
+
+  return null;
+}
 
 fetch(CSV_URL)
   .then(response => response.text())
   .then(csv => {
 
-    const rows = csv.trim().split("\n");
+    const rows = csv.trim().split(/\r?\n/);
 
     const permit = rows
       .slice(1)
@@ -78,20 +92,18 @@ fetch(CSV_URL)
       .find(row => row[0].trim() === id);
 
     if (!permit) {
-
       document.getElementById("result").innerHTML = `
+        <div class="label">PARKIMISLUBA</div>
+
         <div class="status invalid">
           LUBA EI LEITUD
         </div>
 
-        <div>
-          ${id || ""}
-        </div>
+        <div>${id || ""}</div>
       `;
 
       return;
     }
-
 
     const permitId = permit[0].trim();
     const reg = permit[1].trim();
@@ -99,10 +111,29 @@ fetch(CSV_URL)
     const until = permit[3].trim();
     const status = permit[4].trim();
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    const active =
+    const fromDate = parseDate(from);
+    const untilDate = parseDate(until);
+
+    if (untilDate) {
+      untilDate.setHours(23, 59, 59, 999);
+    }
+
+    const statusActive =
       status.toLowerCase() === "aktiivne";
 
+    const hasStarted =
+      !fromDate || today >= fromDate;
+
+    const notExpired =
+      !untilDate || today <= untilDate;
+
+    const active =
+      statusActive &&
+      hasStarted &&
+      notExpired;
 
     document.getElementById("result").innerHTML = `
 
@@ -131,19 +162,15 @@ fetch(CSV_URL)
       </div>
 
     `;
-
   })
 
   .catch(error => {
-
     document.getElementById("result").innerHTML = `
       <div class="status invalid">
         Andmete laadimine ebaõnnestus
       </div>
     `;
-
   });
-
 </script>
 
 </body>
