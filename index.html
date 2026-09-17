@@ -1,54 +1,59 @@
 <!DOCTYPE html>
 <html lang="et">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Parkimisloa kontroll</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parkimisloa kontroll</title>
 
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f3f3f3;
-      margin: 0;
-      padding: 25px;
-      text-align: center;
-    }
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #f3f3f3;
+  margin: 0;
+  padding: 25px;
+  text-align: center;
+}
 
-    .card {
-      max-width: 420px;
-      margin: 30px auto;
-      background: white;
-      padding: 35px;
-      border-radius: 16px;
-      box-shadow: 0 3px 15px rgba(0,0,0,.08);
-    }
+.card {
+  max-width: 420px;
+  margin: 30px auto;
+  background: white;
+  padding: 35px;
+  border-radius: 16px;
+  box-shadow: 0 3px 15px rgba(0,0,0,.08);
+}
 
-    .reg {
-      font-size: 38px;
-      font-weight: bold;
-      margin: 20px 0;
-    }
+.label {
+  color: #777;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
 
-    .status {
-      font-size: 30px;
-      font-weight: bold;
-      margin: 25px 0;
-    }
+.reg {
+  font-size: 42px;
+  font-weight: bold;
+  margin: 25px 0;
+}
 
-    .valid {
-      color: #159447;
-    }
+.status {
+  font-size: 30px;
+  font-weight: bold;
+  margin: 25px 0;
+}
 
-    .invalid {
-      color: #d32f2f;
-    }
+.valid {
+  color: #159447;
+}
 
-    .label {
-      color: #777;
-      font-size: 14px;
-      letter-spacing: 1px;
-    }
-  </style>
+.invalid {
+  color: #d32f2f;
+}
+
+.details {
+  font-size: 17px;
+  line-height: 1.7;
+}
+</style>
 </head>
 
 <body>
@@ -58,82 +63,92 @@
 </div>
 
 <script>
+
 const CSV_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vQJ2FJlBILmtLsYYJ4SgZ3jzEydJCWFWBSK_jMuBFRmY_h2z8YeQJtkbSVyX8NT23SgQOnsKRCB8D57/pub?gid=0&single=true&output=csv";
+"https://docs.google.com/spreadsheets/d/e/2PACX-1vQJ2FJlBILmtLsYYJ4SgZ3jzEydJCWFWBSK_jMuBFRmY_h2z8YeQJtkbSVyX8NT23SgQOnsKRCB8D57/pub?gid=0&single=true&output=csv";
 
-const params = new URLSearchParams(window.location.search);
-const id = params.get("id");
+const id = new URLSearchParams(window.location.search).get("id");
 
-function parseDate(value) {
-  if (!value) return null;
 
-  const parts = value.trim().split(".");
+function parseCSVLine(line) {
 
-  if (parts.length === 3) {
-    return new Date(
-      Number(parts[2]),
-      Number(parts[1]) - 1,
-      Number(parts[0])
-    );
+  const result = [];
+  let current = "";
+  let insideQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+
+    const char = line[i];
+
+    if (char === '"') {
+
+      if (insideQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+
+    } else if (char === "," && !insideQuotes) {
+
+      result.push(current);
+      current = "";
+
+    } else {
+
+      current += char;
+
+    }
   }
 
-  return null;
+  result.push(current);
+
+  return result;
 }
 
-fetch(CSV_URL)
-  .then(response => response.text())
-  .then(csv => {
 
-    const rows = csv.trim().split(/\r?\n/);
+function parseDate(value) {
 
-    const permit = rows
-      .slice(1)
-      .map(row => row.split(","))
-      .find(row => row[0].trim() === id);
+  if (!value) return null;
 
-    if (!permit) {
-      document.getElementById("result").innerHTML = `
-        <div class="label">PARKIMISLUBA</div>
+  const parts = value.trim().split(/[./]/);
 
-        <div class="status invalid">
-          LUBA EI LEITUD
-        </div>
+  if (parts.length !== 3) return null;
 
-        <div>${id || ""}</div>
-      `;
+  return new Date(
+    Number(parts[2]),
+    Number(parts[1]) - 1,
+    Number(parts[0])
+  );
+}
 
-      return;
-    }
 
-    const permitId = permit[0].trim();
-    const reg = permit[1].trim();
-    const from = permit[2].trim();
-    const until = permit[3].trim();
-    const status = permit[4].trim();
+fetch(CSV_URL + "&t=" + Date.now())
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+.then(response => response.text())
 
-    const fromDate = parseDate(from);
-    const untilDate = parseDate(until);
+.then(csv => {
 
-    if (untilDate) {
-      untilDate.setHours(23, 59, 59, 999);
-    }
+  const lines = csv.trim().split(/\r?\n/);
 
-    const statusActive =
-      status.toLowerCase() === "aktiivne";
+  const headers = parseCSVLine(lines[0])
+    .map(h => h.trim().toLowerCase());
 
-    const hasStarted =
-      !fromDate || today >= fromDate;
+  const rows = lines.slice(1).map(parseCSVLine);
 
-    const notExpired =
-      !untilDate || today <= untilDate;
+  const idIndex = headers.indexOf("loa id");
+  const regIndex = headers.indexOf("reg nr");
+  const fromIndex = headers.indexOf("kehtiv alates");
+  const untilIndex = headers.indexOf("kehtiv kuni");
+  const statusIndex = headers.indexOf("staatus");
 
-    const active =
-      statusActive &&
-      hasStarted &&
-      notExpired;
+
+  const permit = rows.find(row =>
+    String(row[idIndex]).trim() === String(id).trim()
+  );
+
+
+  if (!permit) {
 
     document.getElementById("result").innerHTML = `
 
@@ -141,37 +156,86 @@ fetch(CSV_URL)
         PARKIMISLUBA
       </div>
 
-      <div class="reg">
-        ${reg}
-      </div>
-
-      <div class="status ${active ? "valid" : "invalid"}">
-        ${active ? "KEHTIV" : "EI KEHTI"}
-      </div>
-
-      <div>
-        <strong>Loa nr:</strong>
-        ${permitId}
-      </div>
-
-      <br>
-
-      <div>
-        <strong>Kehtib:</strong><br>
-        ${from} – ${until}
-      </div>
-
-    `;
-  })
-
-  .catch(error => {
-    document.getElementById("result").innerHTML = `
       <div class="status invalid">
-        Andmete laadimine ebaõnnestus
+        LUBA EI LEITUD
       </div>
-    `;
-  });
-</script>
 
+      <div>
+        ${id || ""}
+      </div>
+
+    `;
+
+    return;
+  }
+
+
+  const permitId = permit[idIndex].trim();
+  const reg = permit[regIndex].trim();
+  const from = permit[fromIndex].trim();
+  const until = permit[untilIndex].trim();
+  const status = permit[statusIndex].trim();
+
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  const fromDate = parseDate(from);
+  const untilDate = parseDate(until);
+
+  if (untilDate) {
+    untilDate.setHours(23,59,59,999);
+  }
+
+
+  const active =
+    status.toLowerCase() === "aktiivne" &&
+    (!fromDate || today >= fromDate) &&
+    (!untilDate || today <= untilDate);
+
+
+  document.getElementById("result").innerHTML = `
+
+    <div class="label">
+      PARKIMISLUBA
+    </div>
+
+    <div class="reg">
+      ${reg}
+    </div>
+
+    <div class="status ${active ? "valid" : "invalid"}">
+      ${active ? "KEHTIV" : "EI KEHTI"}
+    </div>
+
+    <div class="details">
+
+      <strong>Loa nr:</strong>
+      ${permitId}
+
+      <br><br>
+
+      <strong>Kehtib:</strong><br>
+      ${from} – ${until}
+
+    </div>
+
+  `;
+
+})
+
+.catch(error => {
+
+  document.getElementById("result").innerHTML = `
+
+    <div class="status invalid">
+      Andmete laadimine ebaõnnestus
+    </div>
+
+  `;
+
+});
+
+</script>
 </body>
 </html>
